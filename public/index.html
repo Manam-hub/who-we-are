@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <title>WHO WE ARE 🎲</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module">
+    import { submitAnswer } from "./app.js";
+
+    window.send = async () => {
+      const name = document.getElementById("name").value.trim();
+      const answer = document.getElementById("answer").value.trim();
+
+      if (!name || !answer) {
+        alert("נא למלא שם מלא ותשובה 🙂");
+        return;
+      }
+
+      await submitAnswer({ name, answer });
+      alert("נשלח בהצלחה! 🎉");
+      document.getElementById("answer").value = "";
+    };
+  </script>
+</head>
+<body dir="rtl">
+  <h1>🎲 WHO WE ARE 🎲</h1>
+
+  <label for="name">שם מלא:</label><br>
+  <input id="name" type="text" placeholder="הקלידו את שמכם"><br><br>
+
+  <label for="answer">מה גורם לי לחייך?</label><br>
+  <input id="answer" type="text" placeholder="כתבו תשובה קצרה"><br><br>
+
+   <button onclick="send()">שליחה</button>
+
+  <script type="module">
+    import { submitAnswer } from "./app.js";
+
+    window.send = async () => {
+      const name = document.getElementById("name").value.trim();
+      const answer = document.getElementById("answer").value.trim();
+
+      if (!name || !answer) {
+        alert("נא למלא שם ותשובה 🙂");
+        return;
+      }
+
+      await submitAnswer({ name, answer });
+      alert("נשלח בהצלחה! 🎉");
+      document.getElementById("answer").value = "";
+    };
+  </script>
+</body>
+</html>
+

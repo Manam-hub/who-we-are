@@ -1,0 +1,55 @@
+/* 🎨 עיצוב בסיסי למשחק WHO WE ARE */
+
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background-color: #f5f7fb;
+  color: #333;
+  text-align: center;
+  direction: rtl;
+  margin: 0;
+  padding: 2rem;
+}
+
+h1 {
+  color: #2a5d84;
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+input {
+  padding: 10px;
+  margin: 5px;
+  border: 2px solid #2a5d84;
+  border-radius: 8px;
+  width: 60%;
+  max-width: 300px;
+}
+
+button {
+  background-color: #2a5d84;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+button:hover {
+  background-color: #357aa8;
+}
+
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+li {
+  background-color: white;
+  margin: 10px auto;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  width: 60%;
+  max-width: 400px;
+}

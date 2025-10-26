@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <title>תשובות בזמן אמת - WHO WE ARE</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module">
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-database.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+
+    // אותו קוד config שהדבקת ב-app.js
+    const firebaseConfig = {
+      apiKey: "AIzaSyDUz4oPw2kumoT9q7ONGLSGgcuYFlnc89o",
+  authDomain: "who-we-are-dee11.firebaseapp.com",
+  databaseURL:"https://who-we-are-dee11-default-rtdb.firebaseio.com",
+  projectId: "who-we-are-dee11",
+  storageBucket: "who-we-are-dee11.firebasestorage.app",
+  messagingSenderId: "685866712511",
+  appId: "1:685866712511:web:a41b29e6a69b8ac889350a"
+};
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const answersRef = ref(db, "answers");
+    const list = document.getElementById("answersList");
+
+    onValue(answersRef, (snapshot) => {
+      list.innerHTML = "";
+      const data = snapshot.val();
+      for (const key in data) {
+        const li = document.createElement("li");
+        li.textContent = data[key].answer;
+        list.appendChild(li);
+      }
+    });
+  </script>
+</head>
+<body dir="rtl">
+  <h1>🎲 תשובות הקבוצה 🎲</h1>
+  <ul id="answersList"></ul>
+</body>
+</html>
