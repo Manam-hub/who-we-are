@@ -43,15 +43,17 @@
 <div class="container mx-auto p-4 md:p-8 text-center">
 
   <!-- Header -->
-  <header class="mb-8">
+  <header class="mb-2">
     <h1 id="question" class="text-3xl md:text-4xl font-bold text-primary">
       ❓ מחכים לשחקנים... ❓
     </h1>
+    <!-- טאבים לשאלות -->
+    <div id="questionTabs" class="flex flex-wrap gap-2 justify-center mt-4"></div>
   </header>
 
   <!-- Cards -->
   <main class="mb-8">
-    <div id="cardsContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 justify-items-center"></div>
+    <div id="cardsContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 justify-items-center"></div>
   </main>
 
   <!-- Timer + Players -->
@@ -94,7 +96,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
   import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 
-  // הדביקי כאן את אותו config בדיוק כמו ב-index.html (כולל databaseURL!)
+  // ----- הדביקי כאן את אותו config בדיוק כמו ב-index.html (כולל databaseURL!) -----
   const firebaseConfig = {
     apiKey: "AIzaSyDUz4oPw2kumoT9q7ONGLSGgcuYFlnc89o",
     authDomain: "who-we-are-dee11.firebaseapp.com",
@@ -105,19 +107,26 @@
     appId: "1:685866712511:web:a41b29e6a69b8ac889350a"
   };
 
+  // -------------------------------------------------------------------------------
 
   const app = initializeApp(firebaseConfig);
   const rtdb = getDatabase(app);
 
+  // DOM
   const playersListEl = document.getElementById("playersList");
   const cardsContainerEl = document.getElementById("cardsContainer");
-  const questionTitleEl = document.getElementById("question");
+  const questionTitleEl  = document.getElementById("question");
+  const tabsEl = document.getElementById("questionTabs");
 
-  let flippedAll = false;
-  let timerInterval = null;
-  let currentQuestionKey = null;
-const layoutsByQuestion = Object.create(null);
+  // State
+  let flippedAll = false,
+      timerInterval = null,
+      currentQuestionKey = null;
 
+  // שמירת פריסות (לשמירה על ערבוב יציב לכל שאלה, אם נרצה בהמשך)
+  const layoutsByQuestion = Object.create(null);
+
+  // עזר
   function startTimer(seconds) {
     if (timerInterval) clearInterval(timerInterval);
     let timeLeft = seconds;
@@ -156,12 +165,32 @@ const layoutsByQuestion = Object.create(null);
   }
   document.getElementById("toggleFlipBtn")?.addEventListener("click", toggleFlipAll);
 
-  function render(entries) {
-    // כותרת שאלה – לפי הרשומה האחרונה (אם קיימת)
-    const last = entries[entries.length - 1];
-    questionTitleEl.textContent = "❓ " + (last?.question || "שאלה") + " ❓";
+  // בונה טאבים לכל שאלה + מונה תשובות
+  function buildQuestionTabs(questionsArr, allEntries) {
+    tabsEl.innerHTML = "";
+    questionsArr.forEach(q => {
+      const count = allEntries.filter(e => (e.question || "") === q).length;
+      const btn = document.createElement("button");
+      btn.className =
+        "px-3 py-1 rounded-full border text-sm m-1 " +
+        (q === currentQuestionKey ? "bg-primary text-white border-primary" : "bg-gray-100 text-gray-800 border-gray-200");
+      btn.textContent = `${q} (${count})`;
+      btn.addEventListener("click", () => {
+        currentQuestionKey = q;
+        const filtered = allEntries.filter(e => (e.question || "") === currentQuestionKey);
+        render(filtered);
+        buildQuestionTabs(questionsArr, allEntries);
+      });
+      tabsEl.appendChild(btn);
+    });
+  }
 
-    // רשימת משתתפים
+  // ציור המסכים לפי השאלה הנוכחית
+  function render(entries) {
+    // כותרת
+    questionTitleEl.textContent = "❓ " + (currentQuestionKey || "שאלה") + " ❓";
+
+    // רשימת משתתפים (ממוספרת 1..N)
     playersListEl.innerHTML = "";
     entries.forEach((e, i) => {
       const li = document.createElement("li");
@@ -169,32 +198,41 @@ const layoutsByQuestion = Object.create(null);
       playersListEl.appendChild(li);
     });
 
-    // כרטיסים
+    // כרטיסי תשובות: בלי מספר על הכרטיס, עם תיבת ניחוש 1..N
     cardsContainerEl.innerHTML = "";
     entries.forEach((e, i) => {
       const wrapper = document.createElement("div");
-      wrapper.className = "flex flex-col items-center gap-2";
+      wrapper.className = "flex flex-col items-center gap-3";
+
+      // בונים אופציות 1..N לפי מספר המשתתפים
+      const optionsHtml = entries.map((_, idx) =>
+        `<option value="${idx + 1}">${idx + 1}</option>`
+      ).join("");
 
       wrapper.innerHTML = `
-        <div class="relative">
-          <div class="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-gray-800 text-white flex items-center justify-center text-sm">${i + 1}</div>
-
-          <div class="flip-card w-32 h-32 md:w-40 md:h-40">
-            <div class="flip-card-inner">
-              <div class="flip-card-front shadow-lg bg-yellow-400 text-white flex items-center justify-center text-center rounded-full p-4">
-                <span class="text-xl font-bold">${e.answer || "—"}</span>
-              </div>
-              <div class="flip-card-back bg-gray-600 text-white flex items-center justify-center text-center rounded-full p-4">
-                <span class="text-xl font-bold">${e.name || "אנונימי/ת"}</span>
-              </div>
+        <div class="flip-card w-32 h-32 md:w-40 md:h-40 cursor-pointer">
+          <div class="flip-card-inner">
+            <div class="flip-card-front shadow-lg bg-yellow-400 text-white flex items-center justify-center text-center rounded-full p-4">
+              <span class="text-xl font-bold break-words">${e.answer || "—"}</span>
+            </div>
+            <div class="flip-card-back bg-gray-600 text-white flex items-center justify-center text-center rounded-full p-4">
+              <span class="text-xl font-bold break-words">${e.name || "אנונימי/ת"}</span>
             </div>
           </div>
+        </div>
+
+        <div class="flex flex-col items-center text-sm text-gray-700">
+          <label class="font-medium mb-1">מי לדעתכם אמר/ה את זה?</label>
+          <select class="border border-gray-300 rounded-lg px-2 py-1 text-center text-base font-semibold guess-select">
+            ${optionsHtml}
+          </select>
+          <div class="text-[12px] text-gray-500 mt-1">בחרו מספר מתוך "משתתפים"</div>
         </div>
       `;
       cardsContainerEl.appendChild(wrapper);
     });
 
-    // בכל עדכון נתונים – אפס מצב ההיפוך והכפתור, והפעל טיימר חדש
+    // איפוס היפוך וכפתור; טיימר חדש
     flippedAll = false;
     document.querySelectorAll(".flip-card").forEach(c => c.classList.remove("flipped"));
     const btn = document.getElementById("toggleFlipBtn");
@@ -207,10 +245,12 @@ const layoutsByQuestion = Object.create(null);
   const playersRef = ref(rtdb, "players");
   onValue(playersRef, (snapshot) => {
     const data = snapshot.val();
+
     if (!data) {
       questionTitleEl.textContent = "מחכים לשחקנים...";
       playersListEl.innerHTML = "<li>עדיין אין משתתפים</li>";
       cardsContainerEl.innerHTML = "";
+      tabsEl.innerHTML = "";
       flippedAll = false;
       const btn = document.getElementById("toggleFlipBtn");
       if (btn) btn.textContent = "הצג שמות ▶️";
@@ -218,10 +258,26 @@ const layoutsByQuestion = Object.create(null);
       return;
     }
 
-    // ממירים לאוסף רשומות ומסדרים לפי זמן
-    const entries = Object.values(data).filter(Boolean);
-    entries.sort((a, b) => (a.answeredAt || "").localeCompare(b.answeredAt || ""));
-    render(entries);
+    // ממירים לרשימה ומסדרים לפי זמן
+    const allEntries = Object.values(data).filter(Boolean);
+    allEntries.sort((a, b) => (a.answeredAt || "").localeCompare(b.answeredAt || ""));
+
+    // שולפים את רשימת השאלות הייחודיות בסדר הופעה
+    const uniqueQuestions = [];
+    allEntries.forEach(e => {
+      const q = e.question || "שאלה";
+      if (!uniqueQuestions.includes(q)) uniqueQuestions.push(q);
+    });
+
+    // בוחרים שאלה נוכחית (אם ריקה/לא קיימת – ניקח את האחרונה)
+    if (!currentQuestionKey || !uniqueQuestions.includes(currentQuestionKey)) {
+      currentQuestionKey = uniqueQuestions[uniqueQuestions.length - 1];
+    }
+
+    // בונים טאבים ומציגים רק את השאלה שנבחרה
+    buildQuestionTabs(uniqueQuestions, allEntries);
+    const filtered = allEntries.filter(e => (e.question || "") === currentQuestionKey);
+    render(filtered);
   });
 </script>
 </body>
