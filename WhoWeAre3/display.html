@@ -37,28 +37,25 @@
     }
     .flip-card-front { background-color: #FBBF24; color: white; }
     .flip-card-back { transform: rotateY(180deg); color: white; background-color: #4B5563; }
+    .disabled-btn { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body class="bg-white text-gray-900">
 <div class="container mx-auto p-4 md:p-8 text-center">
 
-  <!-- Header -->
+  <!-- כותרת -->
   <header class="mb-2">
-    <h1 id="question" class="text-3xl md:text-4xl font-bold text-primary">
-      ❓ מחכים לשחקנים... ❓
-    </h1>
-    <!-- טאבים לשאלות -->
-    <div id="questionTabs" class="flex flex-wrap gap-2 justify-center mt-4"></div>
+    <h1 id="question" class="text-3xl md:text-4xl font-bold text-primary">❓ מחכים לשחקנים... ❓</h1>
   </header>
 
-  <!-- Cards -->
+  <!-- תשובות -->
   <main class="mb-8">
     <div id="cardsContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 justify-items-center"></div>
   </main>
 
-  <!-- Timer + Players -->
+  <!-- טיימר + רשימת משתתפים -->
   <div class="flex flex-col md:flex-row justify-around items-center gap-8">
-    <!-- Timer -->
+    <!-- טיימר -->
     <div class="relative w-32 h-32 md:w-40 md:h-40">
       <svg class="w-full h-full" viewBox="0 0 100 100">
         <circle class="text-gray-200" cx="50" cy="50" r="45" stroke="currentColor" stroke-width="10" fill="transparent"></circle>
@@ -73,7 +70,7 @@
       </div>
     </div>
 
-    <!-- Players -->
+    <!-- רשימת משתתפים -->
     <div class="text-right">
       <h2 class="text-2xl font-bold mb-4 flex items-center justify-end">
         <span class="material-icons text-primary text-3xl ml-2">groups</span> משתתפים
@@ -82,11 +79,17 @@
     </div>
   </div>
 
-  <!-- Footer: כפתור יחיד להפוך את כל הכרטיסים -->
-  <footer class="mt-12">
+  <!-- פוטר: כפתורים -->
+  <footer class="mt-12 flex items-center justify-center gap-4">
     <button id="toggleFlipBtn"
             class="bg-primary text-white font-bold py-3 px-8 rounded-full text-xl hover:bg-purple-700 transition-transform transform hover:scale-105">
       הצג שמות ▶️
+    </button>
+
+    <button id="nextQuestionBtn"
+            class="bg-gray-800 text-white font-bold py-3 px-8 rounded-full text-xl transition-all disabled-btn"
+            disabled>
+      שאלה הבאה ➡️
     </button>
   </footer>
 </div>
@@ -96,7 +99,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
   import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 
-  // ----- הדביקי כאן את אותו config בדיוק כמו ב-index.html (כולל databaseURL!) -----
+  // === הדביקי כאן את אותו config כמו ב-index.html (כולל databaseURL!) ===
   const firebaseConfig = {
     apiKey: "AIzaSyDUz4oPw2kumoT9q7ONGLSGgcuYFlnc89o",
     authDomain: "who-we-are-dee11.firebaseapp.com",
@@ -107,7 +110,7 @@
     appId: "1:685866712511:web:a41b29e6a69b8ac889350a"
   };
 
-  // -------------------------------------------------------------------------------
+  // =====================================================================
 
   const app = initializeApp(firebaseConfig);
   const rtdb = getDatabase(app);
@@ -116,17 +119,17 @@
   const playersListEl = document.getElementById("playersList");
   const cardsContainerEl = document.getElementById("cardsContainer");
   const questionTitleEl  = document.getElementById("question");
-  const tabsEl = document.getElementById("questionTabs");
+  const flipBtn = document.getElementById("toggleFlipBtn");
+  const nextBtn = document.getElementById("nextQuestionBtn");
 
   // State
-  let flippedAll = false,
-      timerInterval = null,
-      currentQuestionKey = null;
+  let flippedAll = false;
+  let timerInterval = null;
+  let uniqueQuestions = [];      // כל השאלות (לפי הנתונים שקיימים)
+  let currentQuestionIndex = 0;  // מצביע לשאלה מוצגת
+  let cachedAllEntries = [];     // לשמור את כל הרשומות הגולמיות מה-DB
 
-  // שמירת פריסות (לשמירה על ערבוב יציב לכל שאלה, אם נרצה בהמשך)
-  const layoutsByQuestion = Object.create(null);
-
-  // עזר
+  // טיימר
   function startTimer(seconds) {
     if (timerInterval) clearInterval(timerInterval);
     let timeLeft = seconds;
@@ -152,6 +155,7 @@
     }, 1000);
   }
 
+  // הפיכת כל הכרטיסים + בדיקת ניחושים + צביעה ירוק/אדום
   function toggleFlipAll() {
     const cards = document.querySelectorAll(".flip-card");
     cards.forEach(card => {
@@ -160,37 +164,71 @@
     });
     flippedAll = !flippedAll;
 
-    const btn = document.getElementById("toggleFlipBtn");
-    if (btn) btn.textContent = flippedAll ? "הצג תשובות ◀️" : "הצג שמות ▶️";
-  }
-  document.getElementById("toggleFlipBtn")?.addEventListener("click", toggleFlipAll);
+    // טקסט כפתור
+    flipBtn.textContent = flippedAll ? "הצג תשובות ◀️" : "הצג שמות ▶️";
 
-  // בונה טאבים לכל שאלה + מונה תשובות
-  function buildQuestionTabs(questionsArr, allEntries) {
-    tabsEl.innerHTML = "";
-    questionsArr.forEach(q => {
-      const count = allEntries.filter(e => (e.question || "") === q).length;
-      const btn = document.createElement("button");
-      btn.className =
-        "px-3 py-1 rounded-full border text-sm m-1 " +
-        (q === currentQuestionKey ? "bg-primary text-white border-primary" : "bg-gray-100 text-gray-800 border-gray-200");
-      btn.textContent = `${q} (${count})`;
-      btn.addEventListener("click", () => {
-        currentQuestionKey = q;
-        const filtered = allEntries.filter(e => (e.question || "") === currentQuestionKey);
-        render(filtered);
-        buildQuestionTabs(questionsArr, allEntries);
+    // לאפשר "שאלה הבאה" רק אחרי חשיפה
+    setNextEnabled(flippedAll);
+
+    // אם חושפים — לבדוק ניחושים ולצבוע
+    if (flippedAll) {
+      evaluateGuessesAndColor();
+    } else {
+      // החזרת צבעים למצב רגיל כשמסתירים
+      document.querySelectorAll(".flip-card-back").forEach(back => {
+        back.classList.remove("bg-green-correct", "bg-red-incorrect");
+        if (!back.classList.contains("bg-gray-600")) back.classList.add("bg-gray-600");
       });
-      tabsEl.appendChild(btn);
+    }
+  }
+  flipBtn.addEventListener("click", toggleFlipAll);
+
+  function setNextEnabled(on) {
+    nextBtn.disabled = !on;
+    nextBtn.classList.toggle("disabled-btn", !on);
+  }
+
+  // בדיקת ניחושים וצביעת כל כרטיס: ירוק/אדום
+  function evaluateGuessesAndColor() {
+    // במצב הנוכחי: רשימת המשתתפים מוצגת לפי entries המסוננים
+    // לכל כרטיס הוספנו data-correct-index = (i+1) ו-select בצמוד אליו
+    const wrappers = cardsContainerEl.querySelectorAll("[data-correct-index]");
+    wrappers.forEach(wrapper => {
+      const correctIndex = Number(wrapper.getAttribute("data-correct-index")); // 1..N
+      const select = wrapper.querySelector(".guess-select");
+      const back = wrapper.querySelector(".flip-card-back");
+
+      // נקה צבע קודם
+      back.classList.remove("bg-green-correct", "bg-red-incorrect", "bg-gray-600");
+
+      const chosen = Number(select?.value || 0);
+      if (chosen === correctIndex) {
+        back.classList.add("bg-green-correct");
+      } else {
+        back.classList.add("bg-red-incorrect");
+      }
     });
   }
 
-  // ציור המסכים לפי השאלה הנוכחית
-  function render(entries) {
-    // כותרת
-    questionTitleEl.textContent = "❓ " + (currentQuestionKey || "שאלה") + " ❓";
+  // מעבר לשאלה הבאה (אחרי חשיפה)
+  function goToNextQuestion() {
+    if (!flippedAll) return; // מגנים על הזרימה: קודם לחשוף
+    if (uniqueQuestions.length === 0) return;
 
-    // רשימת משתתפים (ממוספרת 1..N)
+    currentQuestionIndex = (currentQuestionIndex + 1) % uniqueQuestions.length;
+    renderForCurrent();
+  }
+  nextBtn.addEventListener("click", goToNextQuestion);
+
+  // ציור המסכים לשאלה הנוכחית
+  function renderForCurrent() {
+    const q = uniqueQuestions[currentQuestionIndex] || "שאלה";
+    questionTitleEl.textContent = "❓ " + q + " ❓";
+
+    // סינון תשובות של השאלה הנוכחית
+    const entries = cachedAllEntries.filter(e => (e.question || "") === q);
+
+    // רשימת משתתפים (1..N)
     playersListEl.innerHTML = "";
     entries.forEach((e, i) => {
       const li = document.createElement("li");
@@ -198,16 +236,14 @@
       playersListEl.appendChild(li);
     });
 
-    // כרטיסי תשובות: בלי מספר על הכרטיס, עם תיבת ניחוש 1..N
+    // כרטיסי תשובות: בלי מספר על הכרטיס; תיבת ניחוש 1..N; ושומרים correct-index = (i+1)
     cardsContainerEl.innerHTML = "";
     entries.forEach((e, i) => {
       const wrapper = document.createElement("div");
       wrapper.className = "flex flex-col items-center gap-3";
+      wrapper.setAttribute("data-correct-index", String(i + 1)); // זה המספר הנכון להשוואה
 
-      // בונים אופציות 1..N לפי מספר המשתתפים
-      const optionsHtml = entries.map((_, idx) =>
-        `<option value="${idx + 1}">${idx + 1}</option>`
-      ).join("");
+      const optionsHtml = entries.map((_, idx) => `<option value="${idx + 1}">${idx + 1}</option>`).join("");
 
       wrapper.innerHTML = `
         <div class="flip-card w-32 h-32 md:w-40 md:h-40 cursor-pointer">
@@ -232,12 +268,15 @@
       cardsContainerEl.appendChild(wrapper);
     });
 
-    // איפוס היפוך וכפתור; טיימר חדש
+    // לאפס היפוך, לכבות "שאלה הבאה", ולהפעיל טיימר חדש
     flippedAll = false;
     document.querySelectorAll(".flip-card").forEach(c => c.classList.remove("flipped"));
-    const btn = document.getElementById("toggleFlipBtn");
-    if (btn) btn.textContent = "הצג שמות ▶️";
-
+    document.querySelectorAll(".flip-card-back").forEach(back => {
+      back.classList.remove("bg-green-correct", "bg-red-incorrect");
+      if (!back.classList.contains("bg-gray-600")) back.classList.add("bg-gray-600");
+    });
+    flipBtn.textContent = "הצג שמות ▶️";
+    setNextEnabled(false);
     startTimer(30);
   }
 
@@ -250,34 +289,30 @@
       questionTitleEl.textContent = "מחכים לשחקנים...";
       playersListEl.innerHTML = "<li>עדיין אין משתתפים</li>";
       cardsContainerEl.innerHTML = "";
-      tabsEl.innerHTML = "";
+      uniqueQuestions = [];
+      currentQuestionIndex = 0;
+      setNextEnabled(false);
       flippedAll = false;
-      const btn = document.getElementById("toggleFlipBtn");
-      if (btn) btn.textContent = "הצג שמות ▶️";
+      flipBtn.textContent = "הצג שמות ▶️";
       startTimer(30);
       return;
     }
 
-    // ממירים לרשימה ומסדרים לפי זמן
-    const allEntries = Object.values(data).filter(Boolean);
-    allEntries.sort((a, b) => (a.answeredAt || "").localeCompare(b.answeredAt || ""));
+    // ממירים לרשימה ומסדרים לפי זמן (ותמיד נשתמש בה)
+    cachedAllEntries = Object.values(data).filter(Boolean);
+    cachedAllEntries.sort((a, b) => (a.answeredAt || "").localeCompare(b.answeredAt || ""));
 
-    // שולפים את רשימת השאלות הייחודיות בסדר הופעה
-    const uniqueQuestions = [];
-    allEntries.forEach(e => {
-      const q = e.question || "שאלה";
-      if (!uniqueQuestions.includes(q)) uniqueQuestions.push(q);
-    });
+    // בונים את רשימת השאלות לפי סדר הופעה
+    const setQ = new Set();
+    cachedAllEntries.forEach(e => setQ.add(e.question || "שאלה"));
+    uniqueQuestions = Array.from(setQ);
 
-    // בוחרים שאלה נוכחית (אם ריקה/לא קיימת – ניקח את האחרונה)
-    if (!currentQuestionKey || !uniqueQuestions.includes(currentQuestionKey)) {
-      currentQuestionKey = uniqueQuestions[uniqueQuestions.length - 1];
-    }
+    // אם האינדקס לא חוקי, נאתחל לסוף/תחילת הרשימה
+    if (currentQuestionIndex >= uniqueQuestions.length) currentQuestionIndex = uniqueQuestions.length - 1;
+    if (currentQuestionIndex < 0) currentQuestionIndex = 0;
 
-    // בונים טאבים ומציגים רק את השאלה שנבחרה
-    buildQuestionTabs(uniqueQuestions, allEntries);
-    const filtered = allEntries.filter(e => (e.question || "") === currentQuestionKey);
-    render(filtered);
+    // ציור לשאלה הנוכחית
+    renderForCurrent();
   });
 </script>
 </body>
