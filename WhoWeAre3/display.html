@@ -115,6 +115,8 @@
 
   let flippedAll = false;
   let timerInterval = null;
+  let currentQuestionKey = null;
+const layoutsByQuestion = Object.create(null);
 
   function startTimer(seconds) {
     if (timerInterval) clearInterval(timerInterval);
