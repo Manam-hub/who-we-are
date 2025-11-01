@@ -38,6 +38,18 @@
     .flip-card-front { background-color: #FBBF24; color: white; }
     .flip-card-back { transform: rotateY(180deg); color: white; background-color: #4B5563; }
     .disabled-btn { opacity: 0.5; cursor: not-allowed; }
+
+    /* רקע חגיגי + אנימציה למסך הסיכום */
+    .animate-bg {
+      animation: gradientBG 8s ease infinite;
+      background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #a18cd1, #fbc2eb);
+      background-size: 400% 400%;
+    }
+    @keyframes gradientBG {
+      0% {background-position:0% 50%}
+      50% {background-position:100% 50%}
+      100% {background-position:0% 50%}
+    }
   </style>
 </head>
 <body class="bg-white text-gray-900">
@@ -79,7 +91,7 @@
     </div>
   </div>
 
-  <!-- פוטר: כפתורים -->
+  <!-- פוטר: רק שני כפתורים -->
   <footer class="mt-12 flex items-center justify-center gap-4">
     <button id="toggleFlipBtn"
             class="bg-primary text-white font-bold py-3 px-8 rounded-full text-xl hover:bg-purple-700 transition-transform transform hover:scale-105">
@@ -97,7 +109,7 @@
 <!-- Firebase + לוגיקה -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+  import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 
   // === הדביקי כאן את אותו config כמו ב-index.html (כולל databaseURL!) ===
   const firebaseConfig = {
@@ -125,9 +137,14 @@
   // State
   let flippedAll = false;
   let timerInterval = null;
-  let uniqueQuestions = [];      // כל השאלות (לפי הנתונים שקיימים)
-  let currentQuestionIndex = 0;  // מצביע לשאלה מוצגת
-  let cachedAllEntries = [];     // לשמור את כל הרשומות הגולמיות מה-DB
+  let uniqueQuestions = [];      // כל השאלות שנמצאו בנתונים
+  let currentQuestionIndex = 0;  // השאלה המוצגת
+  let cachedAllEntries = [];     // כל הרשומות מה-DB
+
+  // ניקוד כולל לכל המשחק
+  let totalCorrect = 0;
+  let totalGuesses = 0;
+  const countedQuestions = new Set(); // לא לספור פעמיים אותה שאלה
 
   // טיימר
   function startTimer(seconds) {
@@ -181,44 +198,53 @@
       });
     }
   }
-  flipBtn.addEventListener("click", toggleFlipAll);
 
   function setNextEnabled(on) {
     nextBtn.disabled = !on;
     nextBtn.classList.toggle("disabled-btn", !on);
   }
 
-  // בדיקת ניחושים וצביעת כל כרטיס: ירוק/אדום
+  // בדיקת ניחושים וצביעת כל כרטיס: ירוק/אדום + ספירת ניקוד פעם אחת לשאלה
   function evaluateGuessesAndColor() {
-    // במצב הנוכחי: רשימת המשתתפים מוצגת לפי entries המסוננים
-    // לכל כרטיס הוספנו data-correct-index = (i+1) ו-select בצמוד אליו
     const wrappers = cardsContainerEl.querySelectorAll("[data-correct-index]");
+
+    let correctCount = 0;
+    const totalCount = wrappers.length;
+
     wrappers.forEach(wrapper => {
       const correctIndex = Number(wrapper.getAttribute("data-correct-index")); // 1..N
       const select = wrapper.querySelector(".guess-select");
       const back = wrapper.querySelector(".flip-card-back");
 
-      // נקה צבע קודם
       back.classList.remove("bg-green-correct", "bg-red-incorrect", "bg-gray-600");
 
       const chosen = Number(select?.value || 0);
       if (chosen === correctIndex) {
+        correctCount++;
         back.classList.add("bg-green-correct");
       } else {
         back.classList.add("bg-red-incorrect");
       }
     });
+
+    if (!countedQuestions.has(currentQuestionIndex)) {
+      totalCorrect += correctCount;
+      totalGuesses += totalCount;
+      countedQuestions.add(currentQuestionIndex);
+    }
   }
 
   // מעבר לשאלה הבאה (אחרי חשיפה)
   function goToNextQuestion() {
-    if (!flippedAll) return; // מגנים על הזרימה: קודם לחשוף
-    if (uniqueQuestions.length === 0) return;
+    if (!flippedAll) return;
 
-    currentQuestionIndex = (currentQuestionIndex + 1) % uniqueQuestions.length;
+    if (currentQuestionIndex === uniqueQuestions.length - 1) {
+      showSummary();
+      return;
+    }
+    currentQuestionIndex++;
     renderForCurrent();
   }
-  nextBtn.addEventListener("click", goToNextQuestion);
 
   // ציור המסכים לשאלה הנוכחית
   function renderForCurrent() {
@@ -241,7 +267,7 @@
     entries.forEach((e, i) => {
       const wrapper = document.createElement("div");
       wrapper.className = "flex flex-col items-center gap-3";
-      wrapper.setAttribute("data-correct-index", String(i + 1)); // זה המספר הנכון להשוואה
+      wrapper.setAttribute("data-correct-index", String(i + 1)); // המספר הנכון להשוואה
 
       const optionsHtml = entries.map((_, idx) => `<option value="${idx + 1}">${idx + 1}</option>`).join("");
 
@@ -280,6 +306,168 @@
     startTimer(30);
   }
 
+  // מסך סיכום + כפתור איפוס צהוב
+  function showSummary() {
+    const percent = totalGuesses === 0 ? 0 : Math.round((totalCorrect / totalGuesses) * 100);
+
+    const message = percent >= 70
+      ? "איזה חיבור בקבוצה!!! אל תשכחו שתמיד יש מקום לחיזוק הקשרים בינינו."
+      : "קבלו משימת חיבור לחיזוק הקשר";
+
+    // מסתירים את האפליקציה
+    const app = document.querySelector(".container");
+    if (app) app.style.display = "none";
+
+    // רקע חגיגי
+    document.body.classList.add("animate-bg");
+
+    // שכבת קונפטי
+    const confettiCanvas = document.createElement("canvas");
+    confettiCanvas.id = "confettiCanvas";
+    confettiCanvas.style.position = "fixed";
+    confettiCanvas.style.top = 0;
+    confettiCanvas.style.left = 0;
+    confettiCanvas.style.width = "100%";
+    confettiCanvas.style.height = "100%";
+    confettiCanvas.style.pointerEvents = "none";
+    document.body.appendChild(confettiCanvas);
+    startConfetti(confettiCanvas);
+
+    // מסך סיכום
+    const summary = document.createElement("div");
+    summary.id = "summaryScreen";
+    summary.className = "fixed inset-0 flex items-center justify-center p-6 text-center";
+    summary.innerHTML = `
+      <div class="max-w-2xl w-full bg-white/80 backdrop-blur rounded-3xl shadow-xl p-8">
+        <h2 class="text-4xl font-extrabold text-primary mb-4">🎊 סיכום המשחק 🎊</h2>
+        <p class="text-3xl mb-2">
+          תוצאה:
+          <span class="font-bold">${totalCorrect}</span>
+          נכונות מתוך
+          <span class="font-bold">${totalGuesses}</span>
+          (${percent}%)
+        </p>
+        <p class="text-2xl font-bold mt-2">${message}</p>
+
+        <button id="resetBtn"
+                class="mt-8 bg-yellow-400 text-gray-900 font-bold py-3 px-8 rounded-full text-xl hover:bg-yellow-500 transition-transform transform hover:scale-105">
+          איפוס משחק 🔁
+        </button>
+      </div>
+    `;
+    document.body.appendChild(summary);
+
+    // חיבור הכפתור הצהוב למסך הסיכום
+    document.getElementById("resetBtn")?.addEventListener("click", resetAll);
+  }
+
+  // קונפטי צבעוני מתמשך
+  function startConfetti(canvas) {
+    const ctx = canvas.getContext("2d");
+    let W = (canvas.width = window.innerWidth);
+    let H = (canvas.height = window.innerHeight);
+
+    const confettis = [];
+    for (let i = 0; i < 160; i++) {
+      confettis.push({
+        x: Math.random() * W,
+        y: Math.random() * H - H,
+        r: Math.random() * 6 + 4,
+        d: Math.random() * 100 + 10,
+        color: `hsl(${Math.random() * 360}, 70%, 60%)`,
+        tilt: Math.random() * 10 - 10,
+        tiltAngleIncremental: Math.random() * 0.07 + 0.05,
+        tiltAngle: 0
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      confettis.forEach(c => {
+        ctx.beginPath();
+        ctx.lineWidth = c.r;
+        ctx.strokeStyle = c.color;
+        ctx.moveTo(c.x + c.tilt + c.r / 2, c.y);
+        ctx.lineTo(c.x + c.tilt, c.y + c.tilt + c.r / 2);
+        ctx.stroke();
+      });
+      update();
+    }
+
+    function update() {
+      confettis.forEach(c => {
+        c.tiltAngle += c.tiltAngleIncremental;
+        c.y += (Math.cos(c.d) + 3 + c.r / 2) / 2;
+        c.x += Math.sin(c.d);
+        c.tilt = Math.sin(c.tiltAngle) * 15;
+        if (c.y > H) {
+          c.x = Math.random() * W;
+          c.y = -10;
+        }
+      });
+    }
+
+    window.addEventListener("resize", () => {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    });
+
+    setInterval(draw, 20);
+  }
+
+  // איפוס כללי: מוחק players/, מאפס ניקוד ומחזיר למסך הראשי
+  function resetAll() {
+    if (!confirm("למחוק את כל התשובות ולהתחיל משחק חדש?")) return;
+
+    // כיבוי זמני של כפתורים
+    try { setNextEnabled(false); } catch {}
+    flipBtn?.setAttribute("disabled", "");
+    nextBtn?.setAttribute("disabled", "");
+    document.getElementById("resetBtn")?.setAttribute("disabled", "");
+
+    const playersRef = ref(rtdb, "players");
+
+    remove(playersRef)
+      .then(() => {
+        // אפס ניקוד ומצב
+        totalCorrect = 0;
+        totalGuesses = 0;
+        countedQuestions.clear();
+        flippedAll = false;
+        uniqueQuestions = [];
+        cachedAllEntries = [];
+        currentQuestionIndex = 0;
+
+        // סגירת סיכום/קונפטי/רקע
+        document.getElementById("summaryScreen")?.remove();
+        document.getElementById("confettiCanvas")?.remove();
+        document.body.classList.remove("animate-bg");
+
+        // החזרת המסך הראשי
+        const app = document.querySelector(".container");
+        if (app) app.style.display = "";
+
+        playersListEl.innerHTML = "";
+        cardsContainerEl.innerHTML = "";
+        questionTitleEl.textContent = "❓ מחכים לשחקנים... ❓";
+        flipBtn.textContent = "הצג שמות ▶️";
+
+        // להחזיר שליטה
+        flipBtn?.removeAttribute("disabled");
+        nextBtn?.setAttribute("disabled", ""); // הבא כבוי עד חשיפה
+        startTimer(30);
+      })
+      .catch((err) => {
+        alert("האיפוס נכשל: " + err.message);
+        document.getElementById("resetBtn")?.removeAttribute("disabled");
+        flipBtn?.removeAttribute("disabled");
+      });
+  }
+
+  // מאזינים
+  flipBtn.addEventListener("click", toggleFlipAll);
+  nextBtn.addEventListener("click", goToNextQuestion);
+
   // מאזין לנתיב players
   const playersRef = ref(rtdb, "players");
   onValue(playersRef, (snapshot) => {
@@ -298,20 +486,18 @@
       return;
     }
 
-    // ממירים לרשימה ומסדרים לפי זמן (ותמיד נשתמש בה)
+    // לרשימה ממוין לפי זמן
     cachedAllEntries = Object.values(data).filter(Boolean);
     cachedAllEntries.sort((a, b) => (a.answeredAt || "").localeCompare(b.answeredAt || ""));
 
-    // בונים את רשימת השאלות לפי סדר הופעה
+    // שאלות ייחודיות לפי סדר הופעה
     const setQ = new Set();
     cachedAllEntries.forEach(e => setQ.add(e.question || "שאלה"));
     uniqueQuestions = Array.from(setQ);
 
-    // אם האינדקס לא חוקי, נאתחל לסוף/תחילת הרשימה
     if (currentQuestionIndex >= uniqueQuestions.length) currentQuestionIndex = uniqueQuestions.length - 1;
     if (currentQuestionIndex < 0) currentQuestionIndex = 0;
 
-    // ציור לשאלה הנוכחית
     renderForCurrent();
   });
 </script>
