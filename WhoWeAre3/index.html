@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>WHOWEARE – משתתפת</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+      h1 { margin-bottom: 12px; }
+      label { display: block; margin: 12px 0 6px; font-weight: 600; }
+      input, button { font-size: 1rem; }
+      input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+      button { margin-top: 12px; padding: 10px 16px; border: 0; background: #8A2BE2; color: #fff; border-radius: 12px; cursor: pointer; }
+      button:hover { background: #7a1fd1; }
+      .card { background:#f8f8ff; border:1px solid #eee; border-radius:12px; padding:16px; margin-top:16px; }
+    </style>
+  </head>
+  <body>
+    <h1>🎲 WHOWEARE 🎲</h1>
+
+    <!-- שלב 1: הצטרפות -->
+    <div id="joinSection" class="card">
+      <label for="fullname">שם מלא:</label>
+      <input type="text" id="fullname" placeholder="רשמו שם מלא" autocomplete="off" />
+      <button id="joinBtn">הצטרפות</button>
+    </div>
+
+    <!-- שלב 2: שאלה ותשובה -->
+    <div id="questionSection" class="card" style="display:none;">
+      <h2 id="questionText" style="margin-top:0;"></h2>
+      <input type="text" id="answer" placeholder="הקלד/י תשובה" autocomplete="off" />
+      <button id="answerBtn">שלח תשובה</button>
+    </div>
+
+    <!-- שלב 3: תודה -->
+    <div id="thanksSection" class="card" style="display:none;">
+      <h2 style="margin:0 0 8px">תודה! התשובה נשמרה 🎉</h2>
+      <p style="margin:0">אפשר לסגור את הדף או להמתין להוראות המנחה.</p>
+    </div>
+
+    <!-- Firebase + לוגיקה -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+      import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+
+      // הדביקי כאן את הערכים מהקונסול שלך (כולל databaseURL!)
+      const firebaseConfig = {
+    apiKey: "AIzaSyDUz4oPw2kumoT9q7ONGLSGgcuYFlnc89o",
+    authDomain: "who-we-are-dee11.firebaseapp.com",
+    databaseURL: "https://who-we-are-dee11-default-rtdb.firebaseio.com",
+    projectId: "who-we-are-dee11",
+    storageBucket: "who-we-are-dee11.firebasestorage.app",
+    messagingSenderId: "685866712511",
+    appId: "1:685866712511:web:a41b29e6a69b8ac889350a"
+  };
+
+      const app = initializeApp(firebaseConfig);
+      const rtdb = getDatabase(app);
+
+      // מאגר שאלות פשוט (דוגמאות)
+      const questions = [
+              "איזה כוח־על היית רוצה שיהיה לך? למה?",
+      "איזו חיית בר היית רוצה לגדל בבית? למה?",
+      "מה השיר שאת/ה הכי אוהב/ת לשיר בקול רם? למה?",
+      "אם היתה לך מכונת זמן, לאיזו תקופה היית נוסע/ת? למה??",
+
+      ];
+
+      let currentPlayer = "";
+      let currentQuestion = "";
+
+      // הצטרפות
+      document.getElementById("joinBtn").addEventListener("click", () => {
+        const fullname = document.getElementById("fullname").value.trim();
+        if (!fullname) { alert("נא להכניס שם מלא!"); return; }
+        currentPlayer = fullname;
+
+        // בוחרים שאלה רנדומלית לשחקנית
+        const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+        currentQuestion = randomQuestion;
+        document.getElementById("questionText").textContent = randomQuestion;
+
+        // מעבר למסך השאלה
+        document.getElementById("joinSection").style.display = "none";
+        document.getElementById("questionSection").style.display = "block";
+      });
+
+      // שליחת תשובה
+      document.getElementById("answerBtn").addEventListener("click", () => {
+        const answer = document.getElementById("answer").value.trim();
+        if (!answer) { alert("נא להכניס תשובה!"); return; }
+
+        const playersRef = ref(rtdb, "players");
+        const newEntryRef = push(playersRef);
+        set(newEntryRef, {
+          name: currentPlayer,
+          question: currentQuestion,
+          answer: answer,
+          answeredAt: new Date().toISOString()
+        })
+        .then(() => {
+          // מעבר למסך תודה
+          document.getElementById("questionSection").style.display = "none";
+          const thanks = document.getElementById("thanksSection");
+          if (thanks) thanks.style.display = "block";
+        })
+        .catch((error) => {
+          console.error("שגיאה בשמירה:", error);
+          alert("קרתה תקלה: " + error.message);
+        });
+      });
+    </script>
+  </body>
+</html>
