@@ -140,6 +140,9 @@
   let uniqueQuestions = [];      // כל השאלות שנמצאו בנתונים
   let currentQuestionIndex = 0;  // השאלה המוצגת
   let cachedAllEntries = [];     // כל הרשומות מה-DB
+  // שומר סידור אקראי לכל שאלה, כדי שלא יתחלף בכל רענון
+  const layoutsByQuestion = Object.create(null);
+
 
   // ניקוד כולל לכל המשחק
   let totalCorrect = 0;
@@ -248,63 +251,81 @@
 
   // ציור המסכים לשאלה הנוכחית
   function renderForCurrent() {
-    const q = uniqueQuestions[currentQuestionIndex] || "שאלה";
-    questionTitleEl.textContent = "❓ " + q + " ❓";
+  const q = uniqueQuestions[currentQuestionIndex] || "שאלה";
+  questionTitleEl.textContent = "❓ " + q + " ❓";
 
-    // סינון תשובות של השאלה הנוכחית
-    const entries = cachedAllEntries.filter(e => (e.question || "") === q);
+  // 1) מסננים את התשובות של השאלה הנוכחית
+  const entries = cachedAllEntries.filter(e => (e.question || "") === q);
 
-    // רשימת משתתפים (1..N)
-    playersListEl.innerHTML = "";
-    entries.forEach((e, i) => {
-      const li = document.createElement("li");
-      li.textContent = `${i + 1} = ${e.name || "אנונימי/ת"}`;
-      playersListEl.appendChild(li);
-    });
+  // 2) מציגים את רשימת המשתתפים בסדר טבעי => זה מה שקובע את המספרים 1..N
+  playersListEl.innerHTML = "";
+  entries.forEach((e, i) => {
+    const li = document.createElement("li");
+    li.textContent = `${i + 1} = ${e.name || "אנונימי/ת"}`;
+    playersListEl.appendChild(li);
+  });
 
-    // כרטיסי תשובות: בלי מספר על הכרטיס; תיבת ניחוש 1..N; ושומרים correct-index = (i+1)
-    cardsContainerEl.innerHTML = "";
-    entries.forEach((e, i) => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "flex flex-col items-center gap-3";
-      wrapper.setAttribute("data-correct-index", String(i + 1)); // המספר הנכון להשוואה
+  // 3) קובעים/טוענים סידור אקראי לכרטיסים עבור השאלה הזו
+  let layout = layoutsByQuestion[q];
+  const n = entries.length;
+  if (!layout || layout.length !== n) {
+    layout = [...Array(n).keys()]; // [0,1,2,...,n-1]
+    // ערבוב פישר–ייטס
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [layout[i], layout[j]] = [layout[j], layout[i]];
+    }
+    layoutsByQuestion[q] = layout;
+  }
 
-      const optionsHtml = entries.map((_, idx) => `<option value="${idx + 1}">${idx + 1}</option>`).join("");
+  // 4) מציגים כרטיסים לפי ה"layout" (סדר אקראי),
+  //    אבל לכל כרטיס נותנים data-correct-index = (אינדקס הרשימה + 1)
+  cardsContainerEl.innerHTML = "";
+  layout.forEach((origIndex) => {
+    const e = entries[origIndex];
+    const correctIndex = origIndex + 1; // זה המספר של אותו משתתף ברשימת 1..N
 
-      wrapper.innerHTML = `
-        <div class="flip-card w-32 h-32 md:w-40 md:h-40 cursor-pointer">
-          <div class="flip-card-inner">
-            <div class="flip-card-front shadow-lg bg-yellow-400 text-white flex items-center justify-center text-center rounded-full p-4">
-              <span class="text-xl font-bold break-words">${e.answer || "—"}</span>
-            </div>
-            <div class="flip-card-back bg-gray-600 text-white flex items-center justify-center text-center rounded-full p-4">
-              <span class="text-xl font-bold break-words">${e.name || "אנונימי/ת"}</span>
-            </div>
+    const optionsHtml = entries.map((_, idx) => `<option value="${idx + 1}">${idx + 1}</option>`).join("");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "flex flex-col items-center gap-3";
+    wrapper.setAttribute("data-correct-index", String(correctIndex));
+
+    wrapper.innerHTML = `
+      <div class="flip-card w-32 h-32 md:w-40 md:h-40 cursor-pointer">
+        <div class="flip-card-inner">
+          <div class="flip-card-front shadow-lg bg-yellow-400 text-white flex items-center justify-center text-center rounded-full p-4">
+            <span class="text-xl font-bold break-words">${e.answer || "—"}</span>
+          </div>
+          <div class="flip-card-back bg-gray-600 text-white flex items-center justify-center text-center rounded-full p-4">
+            <span class="text-xl font-bold break-words">${e.name || "אנונימי/ת"}</span>
           </div>
         </div>
+      </div>
 
-        <div class="flex flex-col items-center text-sm text-gray-700">
-          <label class="font-medium mb-1">מי לדעתכם אמר/ה את זה?</label>
-          <select class="border border-gray-300 rounded-lg px-2 py-1 text-center text-base font-semibold guess-select">
-            ${optionsHtml}
-          </select>
-          <div class="text-[12px] text-gray-500 mt-1">בחרו מספר מתוך "משתתפים"</div>
-        </div>
-      `;
-      cardsContainerEl.appendChild(wrapper);
-    });
+      <div class="flex flex-col items-center text-sm text-gray-700">
+        <label class="font-medium mb-1">מי לדעתכם אמר/ה את זה?</label>
+        <select class="border border-gray-300 rounded-lg px-2 py-1 text-center text-base font-semibold guess-select">
+          ${optionsHtml}
+        </select>
+        <div class="text-[12px] text-gray-500 mt-1">בחרו מספר מתוך "משתתפים"</div>
+      </div>
+    `;
+    cardsContainerEl.appendChild(wrapper);
+  });
 
-    // לאפס היפוך, לכבות "שאלה הבאה", ולהפעיל טיימר חדש
-    flippedAll = false;
-    document.querySelectorAll(".flip-card").forEach(c => c.classList.remove("flipped"));
-    document.querySelectorAll(".flip-card-back").forEach(back => {
-      back.classList.remove("bg-green-correct", "bg-red-incorrect");
-      if (!back.classList.contains("bg-gray-600")) back.classList.add("bg-gray-600");
-    });
-    flipBtn.textContent = "הצג שמות ▶️";
-    setNextEnabled(false);
-    startTimer(30);
-  }
+  // 5) מאפסים מצב תצוגה/טיימר לשאלה חדשה
+  flippedAll = false;
+  document.querySelectorAll(".flip-card").forEach(c => c.classList.remove("flipped"));
+  document.querySelectorAll(".flip-card-back").forEach(back => {
+    back.classList.remove("bg-green-correct", "bg-red-incorrect");
+    if (!back.classList.contains("bg-gray-600")) back.classList.add("bg-gray-600");
+  });
+  flipBtn.textContent = "הצג שמות ▶️";
+  setNextEnabled(false);
+  startTimer(30);
+}
+
 
   // מסך סיכום + כפתור איפוס צהוב
   function showSummary() {
